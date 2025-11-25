@@ -73,4 +73,8 @@ C:\Users\mzky\Videos\bilibili\output\【4K8K-世界各地的美景】\中国-美
 
 ## 提缺陷和建议
 
-知乎不常上，缺陷或建议提交 [issues](https://github.com/mzky/m4s-converter/issues/new/choose) , 最好带上异常视频的URL地址
+缺陷或建议提交 [issues](https://github.com/mzky/m4s-converter/issues/new/choose) , 最好带上异常视频的URL地址
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=mzky/m4s-converter&type=date&legend=top-left)](https://www.star-history.com/#mzky/m4s-converter&type=date&legend=top-left)
