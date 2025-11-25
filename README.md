@@ -77,4 +77,10 @@ C:\Users\mzky\Videos\bilibili\output\【4K8K-世界各地的美景】\中国-美
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=mzky/m4s-converter&type=date&legend=top-left)](https://www.star-history.com/#mzky/m4s-converter&type=date&legend=top-left)
+<a href="https://www.star-history.com/#mzky/m4s-converter&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=mzky/m4s-converter&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=mzky/m4s-converter&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=mzky/m4s-converter&type=date&legend=top-left" />
+ </picture>
+</a>
