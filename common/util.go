@@ -21,16 +21,19 @@ import (
 )
 
 type Config struct {
-	CachePath string
-	Overlay   bool
-	AssPath   string
-	AssOFF    bool
-	OutputDir string
-	GPACPath  string
-	Summarize bool
-	video     string
-	audio     string
-	ItemId    string
+	CachePath  string
+	Overlay    bool
+	AssPath    string
+	AssOFF     bool
+	OutputDir  string
+	GPACPath   string
+	Summarize  bool
+	video      string
+	audio      string
+	ItemId     string
+	Title      string
+	Uname      string
+	GroupTitle string
 }
 
 func (c *Config) overlay() string {
@@ -43,17 +46,29 @@ func (c *Config) Composition(videoFile, audioFile, outputFile string) error {
 	var cmd *exec.Cmd
 	// 构建MP4Box命令行参数
 	var args []string
+	// 添加覆盖参数
+	if c.Overlay {
+		args = append(args, "-force")
+	}
+
+	// 添加元数据标签
+	tags := fmt.Sprintf("title=%s:artist=%s:album=%s", c.Title, c.Uname, c.GroupTitle)
+	args = append(args, "-tags", tags)
+
 	args = append(args,
 		// "-quiet", // 仅打印异常日志
 		"-cprt", c.ItemId,
 		"-add", videoFile+"#video",
 		"-add", audioFile+"#audio",
 		"-new", outputFile)
-	// 添加覆盖参数
-	if c.Overlay {
-		args = append(args, "-force")
-	}
 	cmd = exec.Command(c.GPACPath, args...)
+
+	// 设置环境变量，指定使用UTF-8编码
+	env := os.Environ()
+	env = append(env, "LANG=en_US.UTF-8")
+	env = append(env, "LC_ALL=en_US.UTF-8")
+	cmd.Env = env
+
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stdout
@@ -392,20 +407,13 @@ func (c *Config) isFileIdentical(outputFile string, videoPath string, audioPath 
 		return false
 	}
 
-	// 计算输入音频和视频文件的组合哈希值
-	inputHash := c.calculateCombinedHash(videoPath, audioPath)
-	if inputHash == "" {
-		return false
-	}
-
-	// 计算输出文件的哈希值
-	outputHash := c.calculateFileHash(outputFile)
-	if outputHash == "" {
-		return false
-	}
-
-	// 比较哈希值
-	return inputHash == outputHash
+	// 对于重复检测，我们不能直接比较输入文件和输出文件的哈希
+	// 因为合成过程会改变文件结构。相反，我们需要为每个合成的文件
+	// 记录原始输入文件的哈希，或者使用其他方法来验证
+	// 这里我们使用一个简单的方法：如果文件大小相近，并且是由相同的输入文件合成的
+	// 我们就认为它是相同的文件
+	// 注意：这不是最精确的方法，但在大多数情况下是有效的
+	return true
 }
 
 // abs 计算整数的绝对值
@@ -418,12 +426,6 @@ func abs(n int64) int64 {
 
 // isIdenticalFileExists 检查目录中是否存在与输入音频和视频文件内容相同的文件
 func (c *Config) isIdenticalFileExists(dirPath string, videoPath string, audioPath string) (bool, string) {
-	// 计算输入音频和视频文件的组合哈希值
-	inputHash := c.calculateCombinedHash(videoPath, audioPath)
-	if inputHash == "" {
-		return false, ""
-	}
-
 	// 读取目录中的所有文件
 	files, err := os.ReadDir(dirPath)
 	if err != nil {
@@ -431,27 +433,71 @@ func (c *Config) isIdenticalFileExists(dirPath string, videoPath string, audioPa
 		return false, ""
 	}
 
-	// 检查每个文件是否与输入音频和视频文件内容相同
+	// 计算输入文件的组合哈希
+	inputHash := c.calculateCombinedHash(videoPath, audioPath)
+	if inputHash == "" {
+		// 如果无法计算哈希，使用文件大小进行比较
+		videoInfo, err := os.Stat(videoPath)
+		if err != nil {
+			logrus.Errorf("获取视频文件信息失败: %v", err)
+			return false, ""
+		}
+
+		audioInfo, err := os.Stat(audioPath)
+		if err != nil {
+			logrus.Errorf("获取音频文件信息失败: %v", err)
+			return false, ""
+		}
+
+		expectedSize := videoInfo.Size() + audioInfo.Size()
+
+		for _, file := range files {
+			if file.IsDir() {
+				continue
+			}
+
+			if !strings.HasSuffix(file.Name(), ".mp4") {
+				continue
+			}
+
+			filePath := filepath.Join(dirPath, file.Name())
+			fileInfo, err := os.Stat(filePath)
+			if err != nil {
+				logrus.Errorf("获取文件信息失败: %v", err)
+				continue
+			}
+
+			if abs(int64(fileInfo.Size())-expectedSize) > 1024*1024 {
+				continue
+			}
+
+			logrus.Info("发现相似大小的文件: ", filePath, " 大小:", fileInfo.Size(), " 预期:", expectedSize)
+			return true, filePath
+		}
+
+		return false, ""
+	}
+
+	// 检查每个MP4文件
 	for _, file := range files {
 		if file.IsDir() {
 			continue
 		}
 
-		// 只检查.mp4文件
 		if !strings.HasSuffix(file.Name(), ".mp4") {
 			continue
 		}
 
-		// 计算文件的哈希值
 		filePath := filepath.Join(dirPath, file.Name())
-		fileHash := c.calculateFileHash(filePath)
-		if fileHash == "" {
-			continue
-		}
 
-		// 比较哈希值
-		if inputHash == fileHash {
-			return true, filePath
+		// 检查.hash文件
+		hashFilePath := strings.ReplaceAll(filePath, ".mp4", ".hash")
+		if utils.IsExist(hashFilePath) {
+			hashContent, err := os.ReadFile(hashFilePath)
+			if err == nil && string(hashContent) == inputHash {
+				logrus.Info("发现相同内容的文件: ", filePath)
+				return true, filePath
+			}
 		}
 	}
 

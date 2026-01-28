@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -104,8 +105,14 @@ func (c *Config) Synthesis() {
 				c.wait()
 			}
 		}
+		// 生成输出文件名
 		mp4Name := title + conver.Mp4Suffix
 		outputFile := filepath.Join(groupDir, mp4Name)
+
+		// 设置元数据信息
+		c.Title = title
+		c.Uname = uname
+		c.GroupTitle = groupTitle
 
 		// 检查目录中是否存在与输入音频和视频文件内容相同的文件
 		if exists, existingFile := c.isIdenticalFileExists(groupDir, video, audio); exists {
@@ -113,19 +120,25 @@ func (c *Config) Synthesis() {
 			continue
 		}
 
-		// 检查文件是否存在，如果存在且不覆盖，则重命名
-		if utils.IsExist(outputFile) && !c.Overlay {
-			mp4Name = title + "-" + c.ItemId + conver.Mp4Suffix
-			outputFile = filepath.Join(groupDir, mp4Name)
-		} else if utils.IsExist(outputFile) && c.Overlay {
-			// 如果设置了覆盖，则直接使用原始文件名，让MP4Box或FFmpeg覆盖已存在的文件
-			logrus.Info("将覆盖已存在的视频文件: ", outputFile)
+		// 检查是否已经存在同名文件
+		if utils.IsExist(outputFile) {
+			logrus.Warn("跳过同名视频: ", outputFile)
+			continue
 		}
 
+		// 执行合成
 		if er := c.Composition(video, audio, outputFile); er != nil {
 			logrus.Errorf("%s 合成失败", filepath.Base(outputFile))
 			continue
 		}
+
+		// 生成并存储文件哈希值，用于后续的重复检测
+		hashFile := strings.ReplaceAll(outputFile, ".mp4", ".hash")
+		inputHash := c.calculateCombinedHash(video, audio)
+		if inputHash != "" {
+			_ = os.WriteFile(hashFile, []byte(inputHash), 0644)
+		}
+
 		outputFiles = append(outputFiles, filepath.Join(groupPath, mp4Name))
 	}
 
@@ -241,6 +254,67 @@ func (c *Config) findMp4Info(fp, sub string) bool {
 		return false
 	}
 	return strings.Contains(string(ret), sub)
+}
+
+// getMp4KeyInfo 从MP4文件中提取关键信息
+func (c *Config) getMp4KeyInfo(fp string) (map[string]string, error) {
+	if !utils.IsExist(c.GPACPath) {
+		return nil, fmt.Errorf("GPAC路径不存在")
+	}
+
+	ret, err := exec.Command(c.GPACPath, "-info", fp).CombinedOutput()
+	if err != nil {
+		return nil, err
+	}
+
+	info := string(ret)
+	keyInfo := make(map[string]string)
+
+	// 提取视频信息
+	if videoMatch := regexp.MustCompile(`Video #\d+: (.*?) \(.*?\)`).FindStringSubmatch(info); len(videoMatch) > 1 {
+		keyInfo["video_codec"] = videoMatch[1]
+	}
+
+	if resolutionMatch := regexp.MustCompile(`Resolution: (\d+x\d+)`).FindStringSubmatch(info); len(resolutionMatch) > 1 {
+		keyInfo["resolution"] = resolutionMatch[1]
+	}
+
+	if frameRateMatch := regexp.MustCompile(`Frame rate: ([\d.]+) fps`).FindStringSubmatch(info); len(frameRateMatch) > 1 {
+		keyInfo["frame_rate"] = frameRateMatch[1]
+	}
+
+	// 提取音频信息
+	if audioMatch := regexp.MustCompile(`Audio #\d+: (.*?) \(.*?\)`).FindStringSubmatch(info); len(audioMatch) > 1 {
+		keyInfo["audio_codec"] = audioMatch[1]
+	}
+
+	if sampleRateMatch := regexp.MustCompile(`Sample rate: (\d+) Hz`).FindStringSubmatch(info); len(sampleRateMatch) > 1 {
+		keyInfo["sample_rate"] = sampleRateMatch[1]
+	}
+
+	return keyInfo, nil
+}
+
+// compareMp4Info 比较两个MP4文件的关键信息是否相同
+func (c *Config) compareMp4Info(file1, file2 string) bool {
+	info1, err1 := c.getMp4KeyInfo(file1)
+	info2, err2 := c.getMp4KeyInfo(file2)
+
+	if err1 != nil || err2 != nil {
+		logrus.Warnf("获取MP4信息失败: %v, %v", err1, err2)
+		return false
+	}
+
+	// 比较关键信息
+	keyFields := []string{"video_codec", "resolution", "frame_rate", "audio_codec", "sample_rate"}
+	for _, key := range keyFields {
+		if info1[key] != info2[key] {
+			logrus.Infof("文件信息不同: %s: %s vs %s", key, info1[key], info2[key])
+			return false
+		}
+	}
+
+	return true
 }
 
 func null2Str(s string, value string) string {

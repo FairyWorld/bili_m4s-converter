@@ -60,6 +60,10 @@ func (c *Config) flag() {
 func (c *Config) InitConfig() {
 	go c.PanicHandler()
 
+	// 首先解析命令行参数
+	c.flag()
+
+	// 显示免责声明
 	fmt.Println("=====================================================")
 	fmt.Println("           使用本程序需遵守以下使用条款")
 	fmt.Println("   仅转换本人通过哔哩哔哩官方客户端合法缓存的视频，")
@@ -73,7 +77,6 @@ func (c *Config) InitConfig() {
 	logrus.Info("用户同意使用，程序继续执行")
 
 	diffVersion()
-	c.flag()
 }
 
 func diffVersion() {
