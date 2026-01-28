@@ -2,10 +2,6 @@ package common
 
 import (
 	"fmt"
-	"github.com/bitly/go-simplejson"
-	"github.com/fatih/color"
-	utils "github.com/mzky/utils/common"
-	"github.com/sirupsen/logrus"
 	"m4s-converter/conver"
 	"os"
 	"os/exec"
@@ -13,6 +9,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/bitly/go-simplejson"
+	"github.com/fatih/color"
+	utils "github.com/mzky/utils/common"
+	"github.com/sirupsen/logrus"
 )
 
 func (c *Config) Synthesis() {
@@ -106,7 +107,7 @@ func (c *Config) Synthesis() {
 		mp4Name := title + conver.Mp4Suffix
 		outputFile := filepath.Join(groupDir, mp4Name)
 		if c.Skip || utils.IsExist(outputFile) && c.findMp4Info(outputFile, c.ItemId) {
-			logrus.Warn("跳过完全相同的视频: ", filepath.Join(groupPath, mp4Name))
+			logrus.Warn("跳过完全相同的视频: ", outputFile)
 			continue
 		}
 		if utils.IsExist(outputFile) && !c.Overlay {
@@ -114,7 +115,7 @@ func (c *Config) Synthesis() {
 			outputFile = filepath.Join(groupDir, mp4Name)
 		}
 		if c.findMp4Info(outputFile, c.ItemId) {
-			logrus.Warn("跳过完全相同的视频: ", filepath.Join(groupPath, mp4Name))
+			logrus.Warn("跳过完全相同的视频: ", outputFile)
 			continue
 		}
 
@@ -125,8 +126,75 @@ func (c *Config) Synthesis() {
 		outputFiles = append(outputFiles, filepath.Join(groupPath, mp4Name))
 	}
 
+	// 处理未合并的MP3和视频文件
+	if c.Summarize {
+		// 查找未合并的MP3和视频文件
+		for _, v := range dirs {
+			video, audio, e := c.GetAudioAndVideo(v)
+			if e != nil {
+				continue
+			}
+
+			// 检查是否已经合成
+			info := filepath.Join(v, conver.VideoInfoJson)
+			if !utils.IsExist(info) {
+				info = filepath.Join(v, conver.VideoInfoSuffix)
+				if !utils.IsExist(info) {
+					info = filepath.Join(v, conver.PlayEntryJson)
+					if !utils.IsExist(info) {
+						continue
+					}
+				}
+			}
+			infoStr, e := os.ReadFile(info)
+			if e != nil {
+				continue
+			}
+			js, e := simplejson.NewJson(infoStr)
+			if e != nil {
+				continue
+			}
+
+			groupTitle := Filter(js.Get("groupTitle").String())
+			groupTitle = null2Str(groupTitle, Filter(js.Get("owner_name").String()))
+			uname := Filter(js.Get("uname").String())
+			uname = null2Str(uname, Filter(js.Get("title").String()))
+			title := Filter(js.Get("page_data").Get("download_subtitle").String())
+			title = null2Str(title, Filter(js.Get("title").String()))
+
+			// 创建项目特定的未合并文件夹
+			groupPath := groupTitle + "-" + uname
+			groupDir := filepath.Join(c.OutputDir, groupPath)
+			if !utils.IsExist(groupDir) {
+				if err = os.MkdirAll(groupDir, os.ModePerm); err != nil {
+					continue
+				}
+			}
+			summaryDir := filepath.Join(groupDir, "未合并文件")
+			if !utils.IsExist(summaryDir) {
+				_ = os.MkdirAll(summaryDir, os.ModePerm)
+			}
+
+			// 复制未合并的视频文件
+			if utils.IsExist(video) {
+				videoDest := filepath.Join(summaryDir, title+"_video"+filepath.Ext(video))
+				if err := c.copyFile(video, videoDest); err == nil {
+					logrus.Info("已将未合并的视频文件放入汇总目录: ", videoDest)
+				}
+			}
+
+			// 复制未合并的音频文件
+			if utils.IsExist(audio) {
+				audioDest := filepath.Join(summaryDir, title+"_audio"+filepath.Ext(audio))
+				if err := c.copyFile(audio, audioDest); err == nil {
+					logrus.Info("已将未合并的音频文件放入汇总目录: ", audioDest)
+				}
+			}
+		}
+	}
+
 	end := time.Now().Unix()
-	logrus.Print("==========================================")
+	logrus.Print("===========================================")
 	if skipFilePaths != nil {
 		logrus.Print("跳过的目录:\n" + strings.Join(skipFilePaths, "\n"))
 	}
@@ -138,7 +206,7 @@ func (c *Config) Synthesis() {
 	} else {
 		logrus.Warn("未合成任何文件！")
 	}
-	logrus.Print("==========================================")
+	logrus.Print("===========================================")
 	logrus.Print("已完成合成任务，耗时: ", end-begin, "秒")
 	c.wait()
 }

@@ -2,10 +2,11 @@ package conver
 
 import (
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/mzky/converter"
 )
@@ -37,8 +38,9 @@ func Xml2Ass(xml string) string {
 	failed := 0
 	for _, file := range xmls {
 		// 加载xml文件
-		src, _ := os.Open(file)
-		if src == nil {
+		src, err := os.Open(file)
+		if err != nil {
+			logrus.Warnf("无法打开XML文件：%v", err)
 			failed++
 			continue
 		}
@@ -46,16 +48,27 @@ func Xml2Ass(xml string) string {
 		dstFile = strings.ReplaceAll(file, filepath.Ext(file), AssSuffix)
 		dst, e := os.Create(dstFile)
 		if e != nil {
+			logrus.Warnf("无法创建ASS文件：%v", e)
 			failed++
+			_ = src.Close()
 			continue
 		}
 		// 如果在go程中加载xml，当文件过多时会出现过高的内存占用
+		// 添加panic恢复机制，防止XML文件格式错误导致软件崩溃
+		defer func() {
+			if r := recover(); r != nil {
+				logrus.Warnf("处理XML文件时发生错误：%v，跳过生成字幕", r)
+				failed++
+			}
+			_ = src.Close()
+			_ = dst.Close()
+		}()
+
 		pool := converter.LoadPool(src, chain)
 		if er := pool.Convert(dst, assConfig); er != nil {
+			logrus.Warnf("转换XML到ASS失败：%v", er)
 			failed++
 		}
-		_ = src.Close()
-		_ = dst.Close()
 	}
 	// fmt.Println("转换弹幕:", "成功数", len(xmls)-failed, "失败数", failed)
 	return dstFile

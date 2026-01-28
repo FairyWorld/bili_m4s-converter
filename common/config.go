@@ -26,6 +26,7 @@ func (c *Config) flag() {
 	flaggy.Bool(&c.AssOFF, "a", "assoff", "关闭自动生成弹幕功能，默认不关闭")
 	flaggy.Bool(&c.Skip, "s", "skip", "跳过合成同名视频(优先级高于overlay)，默认不跳过，但会跳过[完全相同]的文件")
 	flaggy.Bool(&c.Overlay, "o", "overlay", "合成文件时是否覆盖同名视频，默认不覆盖并重命名新文件")
+	flaggy.Bool(&c.Summarize, "u", "summarize", "将未合并的MP3和视频文件放入汇总目录，默认不汇总")
 	flaggy.String(&c.CachePath, "c", "cachepath", "自定义视频缓存路径，默认使用bilibili的默认缓存路径")
 	flaggy.String(&c.GPACPath, "g", "gpacpath", "自定义GPAC的mp4box文件路径,值为select时弹出选择对话框")
 	flaggy.String(&c.FFMpegPath, "f", "ffmpegpath", "自定义FFMpeg文件路径,值为select时弹出选择对话框")

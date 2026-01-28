@@ -27,6 +27,7 @@ type Config struct {
 	AssOFF     bool
 	OutputDir  string
 	GPACPath   string
+	Summarize  bool
 	video      string
 	audio      string
 	ItemId     string
@@ -149,31 +150,34 @@ func joinXmlUrl(cid string) string {
 // - audio: 查找到的音频文件路径
 // - error: 在搜索、下载或转换过程中遇到的任何错误
 func (c *Config) GetAudioAndVideo(cachePath string) (string, string, error) {
+	var video, audio string
 	// 遍历给定路径下的所有文件和目录
-	if err := filepath.Walk(cachePath, c.findAV); err != nil {
+	if err := filepath.Walk(cachePath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err // 如果遇到错误，立即返回
+		}
+		if !info.IsDir() {
+			// 如果是文件，检查是否为视频或音频文件
+			if strings.Contains(path, conver.VideoSuffix) {
+				video = path // 找到视频文件
+			}
+			if strings.Contains(path, conver.AudioSuffix) {
+				audio = path // 找到音频文件
+			}
+		}
+		return nil
+	}); err != nil {
 		return "", "", err // 如果遍历过程中发生错误，返回错误信息
 	}
 	// 下载弹幕文件
 	if !c.AssOFF {
+		// 保存当前的video路径，用于downloadXml
+		oldVideo := c.video
+		c.video = video
 		c.downloadXml()
+		c.video = oldVideo
 	}
-	return c.video, c.audio, nil // 返回找到的视频和音频文件路径
-}
-
-func (c *Config) findAV(path string, info os.FileInfo, err error) error {
-	if err != nil {
-		return err // 如果遇到错误，立即返回
-	}
-	if !info.IsDir() {
-		// 如果是文件，检查是否为视频或音频文件
-		if strings.Contains(path, conver.VideoSuffix) {
-			c.video = path // 找到视频文件
-		}
-		if strings.Contains(path, conver.AudioSuffix) {
-			c.audio = path // 找到音频文件
-		}
-	}
-	return nil
+	return video, audio, nil // 返回找到的视频和音频文件路径
 }
 func (c *Config) copyFile(src, dst string) error {
 	// 打开源文件
