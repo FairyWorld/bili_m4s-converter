@@ -117,15 +117,24 @@ func (c *Config) Synthesis() {
 		c.Uname = uname
 		c.GroupTitle = groupTitle
 
-		// 检查目录中是否存在与输入音频和视频文件内容相同的文件
-		if exists, existingFile := c.isIdenticalFileExists(groupDir, video, audio); exists {
-			logrus.Warn("跳过完全相同的视频: ", existingFile)
+		// 检查是否已经存在已合并文件
+		if utils.IsExist(outputFile) {
+			// 提取已合并文件的元数据
+			if metadata, err := c.getMp4Metadata(outputFile); err == nil {
+				// 验证三个值是否一致
+				if metadata["title"] == c.GroupId && metadata["artist"] == c.Uid && metadata["album"] == c.ItemId {
+					logrus.Warn("跳过已合并文件: ", outputFile)
+					continue
+				}
+			}
+			// 如果元数据提取失败或验证失败，仍然跳过同名文件
+			logrus.Warn("跳过已合并的视频: ", outputFile)
 			continue
 		}
 
-		// 检查是否已经存在同名文件
-		if utils.IsExist(outputFile) {
-			logrus.Warn("跳过同名视频: ", outputFile)
+		// 检查目录中是否存在与输入音频和视频文件内容相同的文件
+		if exists, existingFile := c.isIdenticalFileExists(groupDir, video, audio); exists {
+			logrus.Warn("跳过完全相同的视频: ", existingFile)
 			continue
 		}
 
