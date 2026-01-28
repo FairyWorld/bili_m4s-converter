@@ -248,7 +248,7 @@ func null2Str(s string, value string) string {
 }
 
 func (c *Config) wait() {
-	fmt.Print("按[回车]键退出...")
+	fmt.Println("按任意键退出程序")
 	_, _ = fmt.Scanln()
 	os.Exit(0)
 }
