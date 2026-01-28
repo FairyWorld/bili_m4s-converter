@@ -328,9 +328,9 @@ func (c *Config) calculateCombinedHash(videoPath string, audioPath string) strin
 		// 使用流式读取，每次读取4KB
 		buffer := make([]byte, 4096)
 		for {
-			n, err := videoFile.Read(buffer)
-			if err != nil && err != io.EOF {
-				logrus.Errorf("读取视频文件失败: %v", err)
+			n, readErr := videoFile.Read(buffer)
+			if readErr != nil && readErr != io.EOF {
+				logrus.Errorf("读取视频文件失败: %v", readErr)
 				videoFile.Close()
 				return ""
 			}
@@ -352,9 +352,9 @@ func (c *Config) calculateCombinedHash(videoPath string, audioPath string) strin
 		// 使用流式读取，每次读取4KB
 		buffer := make([]byte, 4096)
 		for {
-			n, err := audioFile.Read(buffer)
-			if err != nil && err != io.EOF {
-				logrus.Errorf("读取音频文件失败: %v", err)
+			n, readErr := audioFile.Read(buffer)
+			if readErr != nil && readErr != io.EOF {
+				logrus.Errorf("读取音频文件失败: %v", readErr)
 				audioFile.Close()
 				return ""
 			}

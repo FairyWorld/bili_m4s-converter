@@ -120,7 +120,8 @@ func (c *Config) Synthesis() {
 		// 检查是否已经存在已合并文件
 		if utils.IsExist(outputFile) {
 			// 提取已合并文件的元数据
-			if metadata, err := c.getMp4Metadata(outputFile); err == nil {
+			metadata, getErr := c.getMp4Metadata(outputFile)
+			if getErr == nil {
 				// 验证三个值是否一致
 				if metadata["title"] == c.GroupId && metadata["artist"] == c.Uid && metadata["album"] == c.ItemId {
 					logrus.Warn("跳过已合并文件: ", outputFile)
