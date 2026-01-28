@@ -106,17 +106,20 @@ func (c *Config) Synthesis() {
 		}
 		mp4Name := title + conver.Mp4Suffix
 		outputFile := filepath.Join(groupDir, mp4Name)
-		if c.Skip || utils.IsExist(outputFile) && c.findMp4Info(outputFile, c.ItemId) {
-			logrus.Warn("跳过完全相同的视频: ", outputFile)
+
+		// 检查目录中是否存在与输入音频和视频文件内容相同的文件
+		if exists, existingFile := c.isIdenticalFileExists(groupDir, video, audio); exists {
+			logrus.Warn("跳过完全相同的视频: ", existingFile)
 			continue
 		}
+
+		// 检查文件是否存在，如果存在且不覆盖，则重命名
 		if utils.IsExist(outputFile) && !c.Overlay {
-			mp4Name = title + c.ItemId + conver.Mp4Suffix
+			mp4Name = title + "-" + c.ItemId + conver.Mp4Suffix
 			outputFile = filepath.Join(groupDir, mp4Name)
-		}
-		if c.findMp4Info(outputFile, c.ItemId) {
-			logrus.Warn("跳过完全相同的视频: ", outputFile)
-			continue
+		} else if utils.IsExist(outputFile) && c.Overlay {
+			// 如果设置了覆盖，则直接使用原始文件名，让MP4Box或FFmpeg覆盖已存在的文件
+			logrus.Info("将覆盖已存在的视频文件: ", outputFile)
 		}
 
 		if er := c.Composition(video, audio, outputFile); er != nil {

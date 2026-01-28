@@ -25,12 +25,10 @@ func (c *Config) flag() {
 	flaggy.SetDescription(color.CyanString("BiliBili音视频合成工具."))
 	flaggy.Bool(&ver, "v", "version", "查看版本信息")
 	flaggy.Bool(&c.AssOFF, "a", "assoff", "关闭自动生成弹幕功能，默认不关闭")
-	flaggy.Bool(&c.Skip, "s", "skip", "跳过合成同名视频(优先级高于overlay)，默认不跳过，但会跳过[完全相同]的文件")
 	flaggy.Bool(&c.Overlay, "o", "overlay", "合成文件时是否覆盖同名视频，默认不覆盖并重命名新文件")
 	flaggy.Bool(&c.Summarize, "u", "summarize", "将未合并的MP3和视频文件放入汇总目录，默认不汇总")
 	flaggy.String(&c.CachePath, "c", "cachepath", "自定义视频缓存路径，默认使用bilibili的默认缓存路径")
 	flaggy.String(&c.GPACPath, "g", "gpacpath", "自定义GPAC的mp4box文件路径,值为select时弹出选择对话框")
-	flaggy.String(&c.FFMpegPath, "f", "ffmpegpath", "自定义FFMpeg文件路径,值为select时弹出选择对话框")
 	flaggy.ShowHelpOnUnexpectedEnable() // 解析到未预期参数时显示帮助
 	flaggy.Parse()
 	if ver {
@@ -40,13 +38,6 @@ func (c *Config) flag() {
 		os.Exit(0)
 	}
 
-	if c.FFMpegPath != "" {
-		if c.FFMpegPath == "select" {
-			c.SelectFFMpegPath()
-		}
-		logrus.Warnln("使用FFMpeg进行音视频合成")
-		return
-	}
 	if c.GPACPath != "" {
 		if c.GPACPath == "select" {
 			c.SelectGPACPath()
@@ -69,13 +60,12 @@ func (c *Config) flag() {
 func (c *Config) InitConfig() {
 	go c.PanicHandler()
 
-	// 显示控制台确认
 	fmt.Println("=====================================================")
-	fmt.Println("使用本程序需遵守以下使用确认")
-	fmt.Println("仅转换本人通过哔哩哔哩官方客户端合法缓存的视频，")
-	fmt.Println("且转换结果严格用于个人备份，绝不传播、分享或商用。")
+	fmt.Println("           使用本程序需遵守以下使用条款")
+	fmt.Println("   仅转换本人通过哔哩哔哩官方客户端合法缓存的视频，")
+	fmt.Println("  且转换结果严格用于个人备份，绝不传播、分享或商用。")
 	fmt.Println("=====================================================")
-	fmt.Println("按任意键同意并继续使用，关闭窗口则拒绝并退出程序")
+	fmt.Println("  按任意键同意并继续使用，关闭窗口则拒绝并退出程序！")
 	fmt.Println("=====================================================")
 
 	// 等待用户输入任意键

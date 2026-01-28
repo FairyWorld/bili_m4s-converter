@@ -3,6 +3,8 @@ package common
 import (
 	"bufio"
 	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"m4s-converter/conver"
@@ -19,18 +21,16 @@ import (
 )
 
 type Config struct {
-	FFMpegPath string
-	CachePath  string
-	Overlay    bool
-	Skip       bool
-	AssPath    string
-	AssOFF     bool
-	OutputDir  string
-	GPACPath   string
-	Summarize  bool
-	video      string
-	audio      string
-	ItemId     string
+	CachePath string
+	Overlay   bool
+	AssPath   string
+	AssOFF    bool
+	OutputDir string
+	GPACPath  string
+	Summarize bool
+	video     string
+	audio     string
+	ItemId    string
 }
 
 func (c *Config) overlay() string {
@@ -41,35 +41,19 @@ func (c *Config) overlay() string {
 }
 func (c *Config) Composition(videoFile, audioFile, outputFile string) error {
 	var cmd *exec.Cmd
-	if c.GPACPath != "" {
-		cmd = exec.Command(c.GPACPath,
-			// "-quiet", // 仅打印异常日志
-			"-cprt", c.ItemId,
-			"-add", videoFile+"#video",
-			"-add", audioFile+"#audio",
-			"-new", outputFile)
-	} else {
-		// 构建FFmpeg命令行参数
-		var args []string
-		args = append(args,
-			"-i", videoFile,
-			"-i", audioFile,
-			"-c:v", "copy", // video不指定编解码，使用 BiliBili 原有编码
-			"-c:a", "copy", // audio不指定编解码可能会导致音视频不同步
-			// "-strict", "experimental", // 宽松编码控制器
-			"-vsync", "2", // 根据音频流调整视频帧率
-			// "-async", "1", // 强制音频流与视频流同步，通过丢弃或重复音频样本以匹配视频流
-			"-shortest",   // 输出文件的长度与较短的那个流相同，防止过长的流导致不同步
-			"-map", "0:v", // 指定从第一个输入文件中选择视频流
-			"-map", "1:a", // 从第二个输入文件中选择音频流
-			c.overlay(),               // 是否覆盖已存在视频
-			"-movflags", "+faststart", // 启用faststart可以让视频在网络传输时更快地开始播放
-			outputFile,
-			"-hide_banner", // 隐藏版本信息和版权声明
-			"-stats",       // 只显示统计信息
-		)
-		cmd = exec.Command(c.FFMpegPath, args...)
+	// 构建MP4Box命令行参数
+	var args []string
+	args = append(args,
+		// "-quiet", // 仅打印异常日志
+		"-cprt", c.ItemId,
+		"-add", videoFile+"#video",
+		"-add", audioFile+"#audio",
+		"-new", outputFile)
+	// 添加覆盖参数
+	if c.Overlay {
+		args = append(args, "-force")
 	}
+	cmd = exec.Command(c.GPACPath, args...)
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stdout
@@ -151,24 +135,40 @@ func joinXmlUrl(cid string) string {
 // - error: 在搜索、下载或转换过程中遇到的任何错误
 func (c *Config) GetAudioAndVideo(cachePath string) (string, string, error) {
 	var video, audio string
-	// 遍历给定路径下的所有文件和目录
-	if err := filepath.Walk(cachePath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err // 如果遇到错误，立即返回
-		}
-		if !info.IsDir() {
-			// 如果是文件，检查是否为视频或音频文件
-			if strings.Contains(path, conver.VideoSuffix) {
-				video = path // 找到视频文件
-			}
-			if strings.Contains(path, conver.AudioSuffix) {
-				audio = path // 找到音频文件
-			}
-		}
-		return nil
-	}); err != nil {
-		return "", "", err // 如果遍历过程中发生错误，返回错误信息
+
+	// 遍历给定路径下的所有文件（不包括子目录）
+	entries, err := os.ReadDir(cachePath)
+	if err != nil {
+		return "", "", err
 	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			// 如果是目录，递归查找
+			childVideo, childAudio, err := c.GetAudioAndVideo(filepath.Join(cachePath, entry.Name()))
+			if err == nil && childVideo != "" && childAudio != "" {
+				video = childVideo
+				audio = childAudio
+				break
+			}
+			continue
+		}
+
+		// 如果是文件，检查是否为视频或音频文件
+		fileName := entry.Name()
+		if strings.HasSuffix(fileName, conver.VideoSuffix) {
+			video = filepath.Join(cachePath, fileName)
+		}
+		if strings.HasSuffix(fileName, conver.AudioSuffix) {
+			audio = filepath.Join(cachePath, fileName)
+		}
+	}
+
+	// 如果在当前目录及其子目录中都找不到视频或音频文件，返回错误
+	if video == "" || audio == "" {
+		return "", "", fmt.Errorf("找不到音频或视频文件: %s", cachePath)
+	}
+
 	// 下载弹幕文件
 	if !c.AssOFF {
 		// 保存当前的video路径，用于downloadXml
@@ -276,6 +276,188 @@ func (c *Config) PanicHandler() {
 	}
 }
 
+// calculateFileHash 计算文件的MD5哈希值（流式计算）
+func (c *Config) calculateFileHash(filePath string) string {
+	file, err := os.Open(filePath)
+	if err != nil {
+		logrus.Errorf("打开文件失败: %v", err)
+		return ""
+	}
+	defer file.Close()
+
+	hash := md5.New()
+
+	// 使用流式读取，每次读取4KB
+	buffer := make([]byte, 4096)
+	for {
+		n, err := file.Read(buffer)
+		if err != nil && err != io.EOF {
+			logrus.Errorf("读取文件失败: %v", err)
+			return ""
+		}
+		if n == 0 {
+			break
+		}
+		// 只更新实际读取的数据
+		hash.Write(buffer[:n])
+	}
+
+	return hex.EncodeToString(hash.Sum(nil))
+}
+
+// calculateCombinedHash 计算音频和视频文件的组合哈希值（流式计算）
+func (c *Config) calculateCombinedHash(videoPath string, audioPath string) string {
+	hash := md5.New()
+
+	// 计算视频文件哈希（流式）
+	videoFile, err := os.Open(videoPath)
+	if err == nil {
+		// 使用流式读取，每次读取4KB
+		buffer := make([]byte, 4096)
+		for {
+			n, err := videoFile.Read(buffer)
+			if err != nil && err != io.EOF {
+				logrus.Errorf("读取视频文件失败: %v", err)
+				videoFile.Close()
+				return ""
+			}
+			if n == 0 {
+				break
+			}
+			// 只更新实际读取的数据
+			hash.Write(buffer[:n])
+		}
+		videoFile.Close()
+	} else {
+		logrus.Errorf("打开视频文件失败: %v", err)
+		return ""
+	}
+
+	// 计算音频文件哈希（流式）
+	audioFile, err := os.Open(audioPath)
+	if err == nil {
+		// 使用流式读取，每次读取4KB
+		buffer := make([]byte, 4096)
+		for {
+			n, err := audioFile.Read(buffer)
+			if err != nil && err != io.EOF {
+				logrus.Errorf("读取音频文件失败: %v", err)
+				audioFile.Close()
+				return ""
+			}
+			if n == 0 {
+				break
+			}
+			// 只更新实际读取的数据
+			hash.Write(buffer[:n])
+		}
+		audioFile.Close()
+	} else {
+		logrus.Errorf("打开音频文件失败: %v", err)
+		return ""
+	}
+
+	return hex.EncodeToString(hash.Sum(nil))
+}
+
+// isFileIdentical 检查输出文件是否与输入的音频和视频文件完全相同
+func (c *Config) isFileIdentical(outputFile string, videoPath string, audioPath string) bool {
+	// 首先检查文件是否存在
+	if !utils.IsExist(outputFile) {
+		return false
+	}
+
+	// 检查文件大小是否相近
+	outputInfo, err := os.Stat(outputFile)
+	if err != nil {
+		logrus.Errorf("获取输出文件信息失败: %v", err)
+		return false
+	}
+
+	videoInfo, err := os.Stat(videoPath)
+	if err != nil {
+		logrus.Errorf("获取视频文件信息失败: %v", err)
+		return false
+	}
+
+	audioInfo, err := os.Stat(audioPath)
+	if err != nil {
+		logrus.Errorf("获取音频文件信息失败: %v", err)
+		return false
+	}
+
+	// 检查文件大小是否相近（允许一定误差）
+	expectedSize := videoInfo.Size() + audioInfo.Size()
+	if abs(int64(outputInfo.Size())-expectedSize) > 1024*1024 { // 允许1MB误差
+		return false
+	}
+
+	// 计算输入音频和视频文件的组合哈希值
+	inputHash := c.calculateCombinedHash(videoPath, audioPath)
+	if inputHash == "" {
+		return false
+	}
+
+	// 计算输出文件的哈希值
+	outputHash := c.calculateFileHash(outputFile)
+	if outputHash == "" {
+		return false
+	}
+
+	// 比较哈希值
+	return inputHash == outputHash
+}
+
+// abs 计算整数的绝对值
+func abs(n int64) int64 {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+// isIdenticalFileExists 检查目录中是否存在与输入音频和视频文件内容相同的文件
+func (c *Config) isIdenticalFileExists(dirPath string, videoPath string, audioPath string) (bool, string) {
+	// 计算输入音频和视频文件的组合哈希值
+	inputHash := c.calculateCombinedHash(videoPath, audioPath)
+	if inputHash == "" {
+		return false, ""
+	}
+
+	// 读取目录中的所有文件
+	files, err := os.ReadDir(dirPath)
+	if err != nil {
+		logrus.Errorf("读取目录失败: %v", err)
+		return false, ""
+	}
+
+	// 检查每个文件是否与输入音频和视频文件内容相同
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+
+		// 只检查.mp4文件
+		if !strings.HasSuffix(file.Name(), ".mp4") {
+			continue
+		}
+
+		// 计算文件的哈希值
+		filePath := filepath.Join(dirPath, file.Name())
+		fileHash := c.calculateFileHash(filePath)
+		if fileHash == "" {
+			continue
+		}
+
+		// 比较哈希值
+		if inputHash == fileHash {
+			return true, filePath
+		}
+	}
+
+	return false, ""
+}
+
 func MessageBox(text string) {
 	_ = zenity.Warning(text, zenity.Title("提示"), zenity.Width(400))
 }
@@ -336,23 +518,6 @@ func (c *Config) SelectGPACPath() {
 			return
 		}
 		MessageBox("选择 GPAC 的 mp4box 文件不存在，请重新选择！")
-	}
-}
-
-func (c *Config) SelectFFMpegPath() {
-	for {
-		var err error
-		c.FFMpegPath, err = zenity.SelectFile(zenity.Title("请选择 FFMpeg 文件"))
-		if c.FFMpegPath == "" || err != nil {
-			logrus.Warn("关闭对话框后自动退出程序")
-			os.Exit(1)
-		}
-
-		if utils.IsExist(c.FFMpegPath) {
-			logrus.Info("选择 FFMpeg 文件为:", c.FFMpegPath)
-			return
-		}
-		MessageBox("选择 FFMpeg 文件不存在，请重新选择！")
 	}
 }
 

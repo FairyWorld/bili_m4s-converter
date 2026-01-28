@@ -5,7 +5,7 @@ bilibili下架了很多视频，之前收藏和缓存的视频均无法播放
 
 - 收藏的视频建议缓存起来，使用本程序将缓存的音视频m4s文件合并成mp4，方便再次播放。
 
-- 因bilibili使用的是GPAC处理视频，本工具从v1.5.0开始默认使用GPAC的MP4Box进行音视频合成（此版开始不支持32位系统），能够避免FFMpeg合成视频后音画不同步问题，详见：https://github.com/mzky/m4s-converter/issues/11
+- 本工具使用GPAC的MP4Box进行音视频合成(v1.5.0之前版本支持FFMpeg)，能够确保合成后的视频质量和同步性。
 
 
 ### 下载后双击执行或通过命令行执行，需要可执行权限
@@ -22,18 +22,15 @@ bilibili下架了很多视频，之前收藏和缓存的视频均无法播放
 
 ### 命令行参数
 ```
-# 指定FFMpeg路径: ./m4s-converter-linux_amd64 -f /var/FFMpeg/ffmpeg 或 ./m4s-converter-amd64 -f select
 # 指定MP4Box路径: ./m4s-converter-amd64.exe -g "D:\GPAC\mp4box.exe" 或 ./m4s-converter-amd64 -g select
  Flags: 
     -h --help         查看帮助信息
     -v --version      查看版本信息
     -a --assoff       关闭自动生成弹幕功能，默认不关闭
-    -s --skip         跳过合成同名视频(优先级高于overlay)，默认不跳过，但会跳过[完全相同]的文件
     -o --overlay      合成文件时是否覆盖同名视频，默认不覆盖并重命名新文件
     -u --summarize    将未合并的MP3和视频文件放入汇总目录，默认不汇总
     -c --cachepath    自定义视频缓存路径，默认使用bilibili的默认缓存路径
     -g --gpacpath     自定义GPAC的mp4box文件路径,值为select时弹出选择对话框
-    -f --ffmpegpath   自定义FFMpeg文件路径,值为select时弹出选择对话框
 ```
 
 
@@ -61,10 +58,9 @@ C:\Users\mzky\Videos\bilibili\output\【4K8K-世界各地的美景】\中国-美
 - https://github.com/kafuumi/converter
 
 
-#### 视频编码使用的工具
+#### 视频合成使用的工具
 - https://gpac.io
-- https://ffmpeg.org
-- 本程序不会对下载的音视频转码，仅通过上面两个工具进行音视频轨合成
+- 本程序使用GPAC的MP4Box进行音视频合成，不会对下载的音视频进行转码
 
 
 #### 非缓存方式下载，推荐使用其它工具
