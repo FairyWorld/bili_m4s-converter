@@ -3,22 +3,23 @@ package common
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/Masterminds/semver"
-	"github.com/fatih/color"
-	"github.com/google/go-github/v65/github"
-	"github.com/integrii/flaggy"
-	"github.com/sirupsen/logrus"
 	"io"
 	"m4s-converter/internal"
 	"net/http"
 	"os"
 	"os/user"
 	"path/filepath"
+
+	"github.com/Masterminds/semver"
+	"github.com/fatih/color"
+	"github.com/google/go-github/v65/github"
+	"github.com/integrii/flaggy"
+	"github.com/sirupsen/logrus"
 )
 
 func (c *Config) flag() {
 	var ver bool
-	u, _ := user.Current()
+	u, err := user.Current()
 	flaggy.DefaultParser.ShowVersionWithVersionFlag = false
 	flaggy.SetName(color.CyanString("m4s-converter"))
 	flaggy.SetDescription(color.CyanString("BiliBili音视频合成工具."))
@@ -56,7 +57,12 @@ func (c *Config) flag() {
 	c.GPACPath = internal.GetMP4Box()
 	logrus.Warnln("使用MP4Box进行音视频合成")
 	if c.CachePath == "" {
-		c.CachePath = filepath.Join(u.HomeDir, "Videos", "bilibili")
+		if err != nil {
+			logrus.Warn("获取当前用户失败，使用默认缓存路径: ", err)
+			c.CachePath = filepath.Join("~", "Videos", "bilibili")
+		} else {
+			c.CachePath = filepath.Join(u.HomeDir, "Videos", "bilibili")
+		}
 	}
 	c.GetCachePath()
 }

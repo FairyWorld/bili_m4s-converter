@@ -30,6 +30,7 @@ bilibili下架了很多视频，之前收藏和缓存的视频均无法播放
     -a --assoff       关闭自动生成弹幕功能，默认不关闭
     -s --skip         跳过合成同名视频(优先级高于overlay)，默认不跳过，但会跳过[完全相同]的文件
     -o --overlay      合成文件时是否覆盖同名视频，默认不覆盖并重命名新文件
+    -u --summarize    将未合并的MP3和视频文件放入汇总目录，默认不汇总
     -c --cachepath    自定义视频缓存路径，默认使用bilibili的默认缓存路径
     -g --gpacpath     自定义GPAC的mp4box文件路径,值为select时弹出选择对话框
     -f --ffmpegpath   自定义FFMpeg文件路径,值为select时弹出选择对话框

@@ -82,7 +82,7 @@ func (c *Config) Composition(videoFile, audioFile, outputFile string) error {
 	// 等待命令执行完成
 	if err := cmd.Run(); err != nil {
 		logrus.Errorf("合成视频文件失败:%s\n%s", filepath.Base(outputFile), stdout.String())
-		return nil
+		return err
 	}
 
 	logrus.Info("已合成视频文件:", filepath.Base(outputFile))
@@ -181,18 +181,18 @@ func (c *Config) GetAudioAndVideo(cachePath string) (string, string, error) {
 }
 func (c *Config) copyFile(src, dst string) error {
 	// 打开源文件
-	srcFile, e := os.Open(src)
-	if e != nil {
-		logrus.Errorf("打开源文件失败: %v", e)
-		return e
+	srcFile, err := os.Open(src)
+	if err != nil {
+		logrus.Errorf("打开源文件失败: %v", err)
+		return err
 	}
 	defer srcFile.Close()
 
 	// 创建目标文件
-	dstFile, e := os.Create(dst)
-	if e != nil {
-		logrus.Errorf("创建目标文件失败: %v", e)
-		return e
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		logrus.Errorf("创建目标文件失败: %v", err)
+		return err
 	}
 	defer dstFile.Close()
 
@@ -200,13 +200,16 @@ func (c *Config) copyFile(src, dst string) error {
 	data := make([]byte, 9)
 	if _, err := io.ReadAtLeast(srcFile, data, 9); err != nil {
 		logrus.Errorf("读取文件头失败: %v", err)
-		return e
+		return err
 	}
 
 	// 检查前 9 个字节是否为 '0'
 	if string(data) != "000000000" {
 		// 如果前 9 个字节不为 '0'，写入这些字节
-		_, _ = dstFile.Write(data)
+		if _, err := dstFile.Write(data); err != nil {
+			logrus.Errorf("写入文件头失败: %v", err)
+			return err
+		}
 	}
 
 	// 使用缓冲读取器逐块读取并写入文件
@@ -253,7 +256,7 @@ func Filter(name string, err error) string {
 	name = strings.ReplaceAll(name, "<", "《")
 	name = strings.ReplaceAll(name, ">", "》")
 	name = strings.ReplaceAll(name, `\`, "#")
-	name = strings.ReplaceAll(name, `"`, "'")
+	name = strings.ReplaceAll(name, `"`, `'`)
 	name = strings.ReplaceAll(name, "/", "#")
 	name = strings.ReplaceAll(name, "|", "_")
 	name = strings.ReplaceAll(name, "?", "？")
@@ -302,52 +305,55 @@ func (c *Config) findM4sFiles() error {
 
 // SelectDirectory 选择 BiliBili 缓存目录
 func (c *Config) SelectDirectory() {
-	var err error
-	c.CachePath, err = zenity.SelectFile(zenity.Title("请选择 BiliBili 缓存目录"), zenity.Directory())
-	if c.CachePath == "" || err != nil {
-		logrus.Warn("关闭对话框后自动退出程序")
-		os.Exit(1)
-	}
+	for {
+		var err error
+		c.CachePath, err = zenity.SelectFile(zenity.Title("请选择 BiliBili 缓存目录"), zenity.Directory())
+		if c.CachePath == "" || err != nil {
+			logrus.Warn("关闭对话框后自动退出程序")
+			os.Exit(1)
+		}
 
-	if c.findM4sFiles() == nil {
-		logrus.Info("选择的 BiliBili 缓存目录为:", c.CachePath)
-		return
+		if c.findM4sFiles() == nil {
+			logrus.Info("选择的 BiliBili 缓存目录为:", c.CachePath)
+			return
+		}
+		MessageBox("选择的 BiliBili 缓存目录内找不到m4s文件，请重新选择！")
 	}
-	MessageBox("选择的 BiliBili 缓存目录内找不到m4s文件，请重新选择！")
-	c.SelectDirectory()
 }
 
 // SelectGPACPath 选择 GPACPath文件
 func (c *Config) SelectGPACPath() {
-	var err error
-	c.GPACPath, err = zenity.SelectFile(zenity.Title("请选择 GPAC 的 mp4box 文件"))
-	if c.GPACPath == "" || err != nil {
-		logrus.Warn("关闭对话框后自动退出程序")
-		os.Exit(1)
-	}
+	for {
+		var err error
+		c.GPACPath, err = zenity.SelectFile(zenity.Title("请选择 GPAC 的 mp4box 文件"))
+		if c.GPACPath == "" || err != nil {
+			logrus.Warn("关闭对话框后自动退出程序")
+			os.Exit(1)
+		}
 
-	if utils.IsExist(c.GPACPath) {
-		logrus.Info("选择 GPAC 的 mp4box 文件为:", c.CachePath)
-		return
+		if utils.IsExist(c.GPACPath) {
+			logrus.Info("选择 GPAC 的 mp4box 文件为:", c.GPACPath)
+			return
+		}
+		MessageBox("选择 GPAC 的 mp4box 文件不存在，请重新选择！")
 	}
-	MessageBox("选择 GPAC 的 mp4box 文件不存在，请重新选择！")
-	c.SelectGPACPath()
 }
 
 func (c *Config) SelectFFMpegPath() {
-	var err error
-	c.FFMpegPath, err = zenity.SelectFile(zenity.Title("请选择 FFMpeg 文件"))
-	if c.FFMpegPath == "" || err != nil {
-		logrus.Warn("关闭对话框后自动退出程序")
-		os.Exit(1)
-	}
+	for {
+		var err error
+		c.FFMpegPath, err = zenity.SelectFile(zenity.Title("请选择 FFMpeg 文件"))
+		if c.FFMpegPath == "" || err != nil {
+			logrus.Warn("关闭对话框后自动退出程序")
+			os.Exit(1)
+		}
 
-	if utils.IsExist(c.FFMpegPath) {
-		logrus.Info("选择 FFMpeg 文件为:", c.CachePath)
-		return
+		if utils.IsExist(c.FFMpegPath) {
+			logrus.Info("选择 FFMpeg 文件为:", c.FFMpegPath)
+			return
+		}
+		MessageBox("选择 FFMpeg 文件不存在，请重新选择！")
 	}
-	MessageBox("选择 FFMpeg 文件不存在，请重新选择！")
-	c.SelectFFMpegPath()
 }
 
 // 如果是目录，尝试下载并转换xml弹幕为ass格式

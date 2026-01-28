@@ -53,22 +53,25 @@ func Xml2Ass(xml string) string {
 			_ = src.Close()
 			continue
 		}
-		// 如果在go程中加载xml，当文件过多时会出现过高的内存占用
+
 		// 添加panic恢复机制，防止XML文件格式错误导致软件崩溃
-		defer func() {
-			if r := recover(); r != nil {
-				logrus.Warnf("处理XML文件时发生错误：%v，跳过生成字幕", r)
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logrus.Warnf("处理XML文件时发生错误：%v，跳过生成字幕", r)
+					failed++
+				}
+				_ = src.Close()
+				_ = dst.Close()
+			}()
+
+			// 如果在go程中加载xml，当文件过多时会出现过高的内存占用
+			pool := converter.LoadPool(src, chain)
+			if er := pool.Convert(dst, assConfig); er != nil {
+				logrus.Warnf("转换XML到ASS失败：%v", er)
 				failed++
 			}
-			_ = src.Close()
-			_ = dst.Close()
 		}()
-
-		pool := converter.LoadPool(src, chain)
-		if er := pool.Convert(dst, assConfig); er != nil {
-			logrus.Warnf("转换XML到ASS失败：%v", er)
-			failed++
-		}
 	}
 	// fmt.Println("转换弹幕:", "成功数", len(xmls)-failed, "失败数", failed)
 	return dstFile

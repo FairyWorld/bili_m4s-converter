@@ -46,7 +46,7 @@ func (c *Config) Synthesis() {
 	for _, v := range dirs {
 		video, audio, e := c.GetAudioAndVideo(v)
 		if e != nil {
-			logrus.Error("找不到已修复的音频和视频文件:", err)
+			logrus.Error("找不到已修复的音频和视频文件:", e)
 			continue
 		}
 		info := filepath.Join(v, conver.VideoInfoJson)
@@ -162,32 +162,50 @@ func (c *Config) Synthesis() {
 			title := Filter(js.Get("page_data").Get("download_subtitle").String())
 			title = null2Str(title, Filter(js.Get("title").String()))
 
+			// 添加空值检查，避免创建空目录名或尝试复制空文件路径
+			if groupTitle == "" && uname == "" {
+				logrus.Warn("项目信息为空，跳过处理未合并文件: ", v)
+				continue
+			}
+
 			// 创建项目特定的未合并文件夹
 			groupPath := groupTitle + "-" + uname
 			groupDir := filepath.Join(c.OutputDir, groupPath)
 			if !utils.IsExist(groupDir) {
 				if err = os.MkdirAll(groupDir, os.ModePerm); err != nil {
+					logrus.Error("创建项目目录失败: ", err)
 					continue
 				}
 			}
 			summaryDir := filepath.Join(groupDir, "未合并文件")
 			if !utils.IsExist(summaryDir) {
-				_ = os.MkdirAll(summaryDir, os.ModePerm)
+				if err = os.MkdirAll(summaryDir, os.ModePerm); err != nil {
+					logrus.Error("创建未合并文件目录失败: ", err)
+					continue
+				}
 			}
 
 			// 复制未合并的视频文件
-			if utils.IsExist(video) {
+			if utils.IsExist(video) && title != "" {
 				videoDest := filepath.Join(summaryDir, title+"_video"+filepath.Ext(video))
-				if err := c.copyFile(video, videoDest); err == nil {
-					logrus.Info("已将未合并的视频文件放入汇总目录: ", videoDest)
+				if !utils.IsExist(videoDest) {
+					if err := c.copyFile(video, videoDest); err == nil {
+						logrus.Info("已将未合并的视频文件放入汇总目录: ", videoDest)
+					}
+				} else {
+					logrus.Warn("未合并的视频文件已存在，跳过复制: ", videoDest)
 				}
 			}
 
 			// 复制未合并的音频文件
-			if utils.IsExist(audio) {
+			if utils.IsExist(audio) && title != "" {
 				audioDest := filepath.Join(summaryDir, title+"_audio"+filepath.Ext(audio))
-				if err := c.copyFile(audio, audioDest); err == nil {
-					logrus.Info("已将未合并的音频文件放入汇总目录: ", audioDest)
+				if !utils.IsExist(audioDest) {
+					if err := c.copyFile(audio, audioDest); err == nil {
+						logrus.Info("已将未合并的音频文件放入汇总目录: ", audioDest)
+					}
+				} else {
+					logrus.Warn("未合并的音频文件已存在，跳过复制: ", audioDest)
 				}
 			}
 		}
