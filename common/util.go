@@ -31,6 +31,8 @@ type Config struct {
 	video      string
 	audio      string
 	ItemId     string
+	GroupId    string
+	Uid        string
 	Title      string
 	Uname      string
 	GroupTitle string
@@ -51,10 +53,12 @@ func (c *Config) Composition(videoFile, audioFile, outputFile string) error {
 		args = append(args, "-force")
 	}
 
-	// 添加元数据标签
-	tags := fmt.Sprintf("title=%s:artist=%s:album=%s", c.Title, c.Uname, c.GroupTitle)
-	args = append(args, "-tags", tags)
+	// 添加字符集参数，指定使用UTF-8编码
+	args = append(args, "-charset", "utf8")
 
+	// 添加元数据标签
+	tags := fmt.Sprintf("title=%s:artist=%s:album=%s", c.GroupId, c.Uid, c.ItemId)
+	args = append(args, "-tags", tags)
 	args = append(args,
 		// "-quiet", // 仅打印异常日志
 		"-cprt", c.ItemId,
@@ -62,12 +66,6 @@ func (c *Config) Composition(videoFile, audioFile, outputFile string) error {
 		"-add", audioFile+"#audio",
 		"-new", outputFile)
 	cmd = exec.Command(c.GPACPath, args...)
-
-	// 设置环境变量，指定使用UTF-8编码
-	env := os.Environ()
-	env = append(env, "LANG=en_US.UTF-8")
-	env = append(env, "LC_ALL=en_US.UTF-8")
-	cmd.Env = env
 
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
@@ -80,11 +78,11 @@ func (c *Config) Composition(videoFile, audioFile, outputFile string) error {
 
 	// 等待命令执行完成
 	if err := cmd.Run(); err != nil {
-		logrus.Errorf("合成视频文件失败:%s\n%s", filepath.Base(outputFile), stdout.String())
+		logrus.Errorf("合成视频文件失败:%s\n%s", outputFile, stdout.String())
 		return err
 	}
 
-	logrus.Info("已合成视频文件:", filepath.Base(outputFile))
+	logrus.Info("已合成视频文件:", outputFile)
 	return nil
 }
 
@@ -424,6 +422,74 @@ func abs(n int64) int64 {
 	return n
 }
 
+// getMp4Metadata 从MP4文件中读取元数据信息
+func (c *Config) getMp4Metadata(filePath string) (map[string]string, error) {
+	// 构建MP4Box命令行参数
+	args := []string{"-info", filePath}
+	cmd := exec.Command(c.GPACPath, args...)
+
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stdout
+
+	// 执行命令
+	if err := cmd.Run(); err != nil {
+		return nil, err
+	}
+
+	// 解析输出
+	output := stdout.String()
+
+	metadata := make(map[string]string)
+
+	// 提取标题信息
+	if idx := strings.Index(strings.ToLower(output), "title:"); idx != -1 {
+		// 找到冒号后的内容，直到换行符
+		colonIdx := strings.Index(output[idx:], ":")
+		if colonIdx != -1 {
+			lineEndIdx := strings.Index(output[idx+colonIdx:], "\n")
+			if lineEndIdx != -1 {
+				value := strings.TrimSpace(output[idx+colonIdx+1 : idx+colonIdx+lineEndIdx])
+				if value != "" {
+					metadata["title"] = value
+				}
+			}
+		}
+	}
+
+	// 提取艺术家信息
+	if idx := strings.Index(strings.ToLower(output), "artist:"); idx != -1 {
+		// 找到冒号后的内容，直到换行符
+		colonIdx := strings.Index(output[idx:], ":")
+		if colonIdx != -1 {
+			lineEndIdx := strings.Index(output[idx+colonIdx:], "\n")
+			if lineEndIdx != -1 {
+				value := strings.TrimSpace(output[idx+colonIdx+1 : idx+colonIdx+lineEndIdx])
+				if value != "" {
+					metadata["artist"] = value
+				}
+			}
+		}
+	}
+
+	// 提取专辑信息
+	if idx := strings.Index(strings.ToLower(output), "album:"); idx != -1 {
+		// 找到冒号后的内容，直到换行符
+		colonIdx := strings.Index(output[idx:], ":")
+		if colonIdx != -1 {
+			lineEndIdx := strings.Index(output[idx+colonIdx:], "\n")
+			if lineEndIdx != -1 {
+				value := strings.TrimSpace(output[idx+colonIdx+1 : idx+colonIdx+lineEndIdx])
+				if value != "" {
+					metadata["album"] = value
+				}
+			}
+		}
+	}
+
+	return metadata, nil
+}
+
 // isIdenticalFileExists 检查目录中是否存在与输入音频和视频文件内容相同的文件
 func (c *Config) isIdenticalFileExists(dirPath string, videoPath string, audioPath string) (bool, string) {
 	// 读取目录中的所有文件
@@ -496,6 +562,15 @@ func (c *Config) isIdenticalFileExists(dirPath string, videoPath string, audioPa
 			hashContent, err := os.ReadFile(hashFilePath)
 			if err == nil && string(hashContent) == inputHash {
 				logrus.Info("发现相同内容的文件: ", filePath)
+				return true, filePath
+			}
+		}
+
+		// 检查MP4文件的元数据
+		metadata, err := c.getMp4Metadata(filePath)
+		if err == nil {
+			if metadata["title"] == c.GroupId && metadata["artist"] == c.Uid && metadata["album"] == c.ItemId {
+				logrus.Info("发现相同元数据的文件: ", filePath)
 				return true, filePath
 			}
 		}

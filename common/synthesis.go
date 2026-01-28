@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -88,6 +87,10 @@ func (c *Config) Synthesis() {
 			itemId, _ = js.Get("owner_id").Int()
 		}
 		c.ItemId = strconv.Itoa(itemId)
+
+		// 设置 groupId 和 uid
+		c.GroupId = Filter(js.Get("groupId").String())
+		c.Uid = Filter(js.Get("uid").String())
 
 		if status != "completed" && status != "视频已缓存完成" && status != "" {
 			skipFilePaths = append(skipFilePaths, v)
@@ -254,67 +257,6 @@ func (c *Config) findMp4Info(fp, sub string) bool {
 		return false
 	}
 	return strings.Contains(string(ret), sub)
-}
-
-// getMp4KeyInfo 从MP4文件中提取关键信息
-func (c *Config) getMp4KeyInfo(fp string) (map[string]string, error) {
-	if !utils.IsExist(c.GPACPath) {
-		return nil, fmt.Errorf("GPAC路径不存在")
-	}
-
-	ret, err := exec.Command(c.GPACPath, "-info", fp).CombinedOutput()
-	if err != nil {
-		return nil, err
-	}
-
-	info := string(ret)
-	keyInfo := make(map[string]string)
-
-	// 提取视频信息
-	if videoMatch := regexp.MustCompile(`Video #\d+: (.*?) \(.*?\)`).FindStringSubmatch(info); len(videoMatch) > 1 {
-		keyInfo["video_codec"] = videoMatch[1]
-	}
-
-	if resolutionMatch := regexp.MustCompile(`Resolution: (\d+x\d+)`).FindStringSubmatch(info); len(resolutionMatch) > 1 {
-		keyInfo["resolution"] = resolutionMatch[1]
-	}
-
-	if frameRateMatch := regexp.MustCompile(`Frame rate: ([\d.]+) fps`).FindStringSubmatch(info); len(frameRateMatch) > 1 {
-		keyInfo["frame_rate"] = frameRateMatch[1]
-	}
-
-	// 提取音频信息
-	if audioMatch := regexp.MustCompile(`Audio #\d+: (.*?) \(.*?\)`).FindStringSubmatch(info); len(audioMatch) > 1 {
-		keyInfo["audio_codec"] = audioMatch[1]
-	}
-
-	if sampleRateMatch := regexp.MustCompile(`Sample rate: (\d+) Hz`).FindStringSubmatch(info); len(sampleRateMatch) > 1 {
-		keyInfo["sample_rate"] = sampleRateMatch[1]
-	}
-
-	return keyInfo, nil
-}
-
-// compareMp4Info 比较两个MP4文件的关键信息是否相同
-func (c *Config) compareMp4Info(file1, file2 string) bool {
-	info1, err1 := c.getMp4KeyInfo(file1)
-	info2, err2 := c.getMp4KeyInfo(file2)
-
-	if err1 != nil || err2 != nil {
-		logrus.Warnf("获取MP4信息失败: %v, %v", err1, err2)
-		return false
-	}
-
-	// 比较关键信息
-	keyFields := []string{"video_codec", "resolution", "frame_rate", "audio_codec", "sample_rate"}
-	for _, key := range keyFields {
-		if info1[key] != info2[key] {
-			logrus.Infof("文件信息不同: %s: %s vs %s", key, info1[key], info2[key])
-			return false
-		}
-	}
-
-	return true
 }
 
 func null2Str(s string, value string) string {
