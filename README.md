@@ -71,10 +71,6 @@ C:\Users\mzky\Videos\bilibili\output\【4K8K-世界各地的美景】\中国-美
 - https://github.com/nICEnnnnnnnLee/BilibiliDown
 - https://github.com/leiurayer/downkyi
 
-⚠️ **法律声明**  
-使用本工具即表示您同意[完整免责声明](免责声明.md)。  
-仅允许转换您本人在视频下架前通过官方客户端合法缓存的内容，且转换结果**严格限于个人备份**，禁止传播与商用。
-
 ## 提缺陷和建议
 
 缺陷或建议提交 [issues](https://github.com/mzky/m4s-converter/issues/new/choose) , 最好带上异常视频的URL地址
@@ -88,3 +84,7 @@ C:\Users\mzky\Videos\bilibili\output\【4K8K-世界各地的美景】\中国-美
    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=mzky/m4s-converter&type=date&legend=top-left" />
  </picture>
 </a>
+
+⚠️ **法律声明**  
+使用本工具即表示您同意[完整免责声明](免责声明.md)。  
+仅允许转换您本人在视频下架前通过官方客户端合法缓存的内容，且转换结果**严格限于个人备份**，禁止传播与商用。
