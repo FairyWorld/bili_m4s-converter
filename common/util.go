@@ -106,7 +106,7 @@ func (c *Config) FindM4sFiles(src string, info os.DirEntry, err error) error {
 			MessageBox(fmt.Sprintf("%v 转换异常：%v", src, err))
 			return err
 		}
-		logrus.Info("已将m4s转换为音视频文件: ", strings.TrimLeft(dst, c.CachePath))
+		logrus.Info("已将m4s转换为音视频文件: ", strings.TrimPrefix(dst, c.CachePath))
 	}
 	return nil
 }
